@@ -1,0 +1,7 @@
+{
+  "name": "StudyBuddy",
+  "description": "An AI-powered study companion featuring a dual-pane interface for real-time tutoring chat, study groups, document summarization, and an interactive Quiz Mode with spaced repetition.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
