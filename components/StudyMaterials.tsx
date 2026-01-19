@@ -181,9 +181,11 @@ const StudyMaterials: React.FC<StudyMaterialsProps> = ({ materials, setMaterials
                       <div className="font-semibold mb-1 text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
                         <SparklesIcon className="w-3 h-3" /> AI Summary
                       </div>
-                      <ReactMarkdown className="prose prose-xs dark:prose-invert max-w-none">
-                        {pdf.summary}
-                      </ReactMarkdown>
+                      <div className="prose prose-xs dark:prose-invert max-w-none">
+                        <ReactMarkdown>
+                          {pdf.summary}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -224,9 +226,11 @@ const StudyMaterials: React.FC<StudyMaterialsProps> = ({ materials, setMaterials
                     <div className="font-semibold mb-1 text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
                         <SparklesIcon className="w-3 h-3" /> AI Summary
                     </div>
-                    <ReactMarkdown className="prose prose-xs dark:prose-invert max-w-none">
-                        {notesMaterial.summary}
-                    </ReactMarkdown>
+                    <div className="prose prose-xs dark:prose-invert max-w-none">
+                        <ReactMarkdown>
+                            {notesMaterial.summary}
+                        </ReactMarkdown>
+                    </div>
                     </div>
                 )}
             </div>

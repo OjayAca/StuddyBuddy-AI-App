@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, StudyMaterial, ChatSession, UserProfile } from '../types';
 import { sendMessageToTutor, generateSpeech } from '../services/geminiService';
-import { SendIcon, BookOpenIcon, UsersIcon, MicIcon, Volume2Icon, StopCircleIcon, TrashIcon, EditIcon } from './Icons';
+import { SendIcon, BookOpenIcon, UsersIcon, MicIcon, Volume2Icon, StopCircleIcon, TrashIcon, EditIcon, PlusIcon, XIcon } from './Icons';
 import ReactMarkdown from 'react-markdown';
 
 interface ChatInterfaceProps {
@@ -44,6 +44,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
+  // Creation Mode State (Modal)
+  const [isCreating, setIsCreating] = useState(false);
+  const [createType, setCreateType] = useState<'personal' | 'group'>('personal');
+  const [newItemName, setNewItemName] = useState('');
+
   // Voice Mode State
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -254,11 +259,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
 
       // If in voice mode, generate and play speech
       if (isVoiceMode) {
-        const audioBase64 = await generateSpeech(responseText, userProfile.voice);
-        playAudio(audioBase64);
+        try {
+          const audioBase64 = await generateSpeech(responseText, userProfile.voice);
+          playAudio(audioBase64);
+        } catch (audioErr) {
+          console.error("TTS generation failed:", audioErr);
+          // Show a non-interrupting error for audio, but keep the text chat successful
+          setMicError("Voice playback failed");
+        }
       }
 
     } catch (error) {
+      console.error("Message handling error:", error);
       setMessagesMap(prev => ({
         ...prev,
         [activeSessionId]: [...(prev[activeSessionId] || []), { role: 'model', text: "Sorry, I encountered an error. Please try again.", timestamp: Date.now() }]
@@ -275,9 +287,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
     }
   };
 
-  const handleCreateGroup = () => {
-    const name = prompt("Enter new group name:");
-    if (name) {
+  // --- Creation Logic ---
+
+  const openCreateModal = (type: 'personal' | 'group') => {
+    setCreateType(type);
+    setNewItemName('');
+    setIsCreating(true);
+  };
+
+  const submitCreate = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newItemName.trim()) return;
+
+    const name = newItemName.trim();
+    if (createType === 'personal') {
+      const newId = `s-${Date.now()}`;
+      const newSession: ChatSession = { id: newId, name, type: 'personal' };
+      setSessions(prev => [...prev, newSession]);
+      setMessagesMap(prev => ({
+        ...prev,
+        [newId]: [{ role: 'model', text: `I am your ${name} tutor. What specifically in ${name} are we studying today?`, timestamp: Date.now() }]
+      }));
+      setActiveSessionId(newId);
+    } else {
       const newId = `g-${Date.now()}`;
       const newSession: ChatSession = { id: newId, name, type: 'group', members: 1 };
       setSessions(prev => [...prev, newSession]);
@@ -287,26 +319,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
       }));
       setActiveSessionId(newId);
     }
-  };
-
-  const handleCreateSubject = () => {
-    const name = prompt("Enter new subject name (e.g., Biology, History):");
-    if (name) {
-      const newId = `s-${Date.now()}`;
-      const newSession: ChatSession = { id: newId, name, type: 'personal' };
-      setSessions(prev => [...prev, newSession]);
-      
-      // Initialize with a specific greeting for this subject to set context immediately in history
-      setMessagesMap(prev => ({
-        ...prev,
-        [newId]: [{ role: 'model', text: `I am your ${name} tutor. What specifically in ${name} are we studying today?`, timestamp: Date.now() }]
-      }));
-      setActiveSessionId(newId);
-    }
+    setIsCreating(false);
+    setNewItemName('');
   };
 
   const handleRenameSession = (e: React.MouseEvent, session: ChatSession) => {
     e.stopPropagation();
+    // Keep using simple prompt for rename for now, or could implement inline edit similarly
     const newName = prompt("Rename subject:", session.name);
     if (newName && newName.trim()) {
       setSessions(prev => prev.map(s => s.id === session.id ? { ...s, name: newName.trim() } : s));
@@ -338,6 +357,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
 
   return (
     <div className="flex h-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
+      
+      {/* Create Modal */}
+      {isCreating && (
+        <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={submitCreate} className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm border border-gray-200 dark:border-gray-800 p-4">
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="font-bold text-gray-800 dark:text-white">
+                 New {createType === 'personal' ? 'Subject' : 'Group'}
+               </h3>
+               <button 
+                type="button" 
+                onClick={() => setIsCreating(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+               >
+                 <XIcon className="w-5 h-5" />
+               </button>
+            </div>
+            <input
+              autoFocus
+              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white mb-4"
+              placeholder={createType === 'personal' ? "e.g., Biology 101" : "e.g., Exam Study Group"}
+              value={newItemName}
+              onChange={e => setNewItemName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button 
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={!newItemName.trim()}
+                className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Sidebar / Group Selector */}
       <div className="w-16 sm:w-64 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 flex flex-col">
          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -358,9 +421,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
                 </div>
                 <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-200 truncate flex-1">{session.name}</span>
                 
-                {/* Actions */}
+                {/* Actions: Always visible if active, otherwise hover */}
                 {session.id !== 'general' && (
-                    <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`hidden sm:flex items-center gap-1 transition-opacity ${activeSessionId === session.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <button 
                             onClick={(e) => handleRenameSession(e, session)}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"
@@ -379,8 +442,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
                 )}
               </div>
             ))}
-            <button onClick={handleCreateSubject} className="w-full px-4 py-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline hidden sm:block text-left mb-4">
+            
+            {/* New Subject Button (Desktop & Mobile) */}
+            <button 
+              onClick={() => openCreateModal('personal')} 
+              className="w-full px-4 py-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline hidden sm:block text-left mb-4"
+            >
               + New Subject
+            </button>
+            <button 
+              onClick={() => openCreateModal('personal')} 
+              className="sm:hidden w-full flex justify-center py-2 text-indigo-600 dark:text-indigo-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              title="New Subject"
+            >
+              <PlusIcon className="w-5 h-5" />
             </button>
             
             {/* Groups Section */}
@@ -399,8 +474,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
                   <div className="text-xs text-gray-400">{session.members} members</div>
                 </div>
 
-                {/* Actions for Groups */}
-                <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Actions */}
+                <div className={`hidden sm:flex items-center gap-1 transition-opacity ${activeSessionId === session.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                     <button 
                         onClick={(e) => handleRenameSession(e, session)}
                         className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"
@@ -419,8 +494,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
               </div>
             ))}
 
-            <button onClick={handleCreateGroup} className="w-full px-4 py-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline hidden sm:block text-left">
-              + New Group
+            {/* New Group Button (Desktop & Mobile) */}
+            <button 
+                onClick={() => openCreateModal('group')} 
+                className="w-full px-4 py-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline hidden sm:block text-left"
+              >
+                + New Group
+            </button>
+            <button 
+              onClick={() => openCreateModal('group')} 
+              className="sm:hidden w-full flex justify-center py-2 text-indigo-600 dark:text-indigo-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              title="New Group"
+            >
+              <PlusIcon className="w-5 h-5" />
             </button>
          </div>
       </div>
@@ -459,10 +545,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ materials, userProfile })
                }`}
              >
                {isVoiceMode ? <MicIcon className="w-3 h-3" /> : <Volume2Icon className="w-3 h-3 opacity-50" />}
-               Voice Mode {isVoiceMode ? 'ON' : 'OFF'}
+               <span className="hidden sm:inline">Voice Mode {isVoiceMode ? 'ON' : 'OFF'}</span>
+               <span className="sm:hidden">Voice</span>
              </button>
-             <span className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
-               ● {activeSession.type === 'personal' ? 'Online' : `${activeSession.members} Members Online`}
+             <span className="hidden sm:inline-block text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+               ● {activeSession.type === 'personal' ? 'Online' : `${activeSession.members} Online`}
              </span>
           </div>
         </div>
